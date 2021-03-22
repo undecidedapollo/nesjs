@@ -1,0 +1,9 @@
+{
+    "extends": "assemblyscript/std/assembly.json",
+    "compilerOptions": {
+        "strictNullChecks": false
+    },
+    "include": [
+        "emulator.ts"
+    ]
+}
