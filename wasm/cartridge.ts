@@ -26,6 +26,13 @@ function uint8ToArray(u8Arr: Uint8Array): Array<i32> {
     return newArr;
 }
 
+export enum MIRROR {
+    HORIZONTAL,
+    VERTICAL,
+    ONESCREEN_LO,
+    ONESCREEN_HI,
+}
+
 export class Cartridge {
     public prgMemory: Uint8Array;
     public chrMemory: Uint8Array;
@@ -35,6 +42,7 @@ export class Cartridge {
     public chrBanks: u8 = 0;
 
     public mapper: Mapper;
+    public mirror: MIRROR = MIRROR.HORIZONTAL;
 
     constructor(fileData: Uint8Array) {
         let pointer = 0;
@@ -55,9 +63,11 @@ export class Cartridge {
         }
 
         this.mapperId = ((header.mapper2 >>> 4) << 4) | (header.mapper1 >>> 4);
+        this.mirror = (header.mapper1 & 0x01) ? MIRROR.VERTICAL : MIRROR.HORIZONTAL;
 
         const fileType: u8 = 1;
 
+        trace("File Type", 1, fileType);
         if (fileType == 0) {
             // Placeholder
             this.prgBanks = 0;
@@ -67,11 +77,14 @@ export class Cartridge {
         } else if (fileType == 1) {
             this.prgBanks = header.prg_rom_chunks;
             const prgMemorySize: u32 = (<u32>this.prgBanks) * 16384;
+            trace("Reading PRG", 2, pointer, prgMemorySize);
             this.prgMemory = fileData.slice(pointer, pointer + prgMemorySize);
             pointer += prgMemorySize;
 
             this.chrBanks = header.chr_rom_chunks;
-            const chrMemorySize: u32 = (<u32>this.chrBanks) * 8192;
+            let chrMemorySize: u32 = (<u32>this.chrBanks) * 8192;
+            if(chrMemorySize == 0) chrMemorySize = 8192;
+            trace("Reading CHR", 2, pointer, chrMemorySize);
             this.chrMemory = fileData.slice(pointer, pointer + chrMemorySize);
             pointer += chrMemorySize;
         } else if (fileType == 2) {

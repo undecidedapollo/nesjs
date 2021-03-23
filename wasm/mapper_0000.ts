@@ -25,7 +25,12 @@ export class Mapper_0000 extends Mapper {
         return new MappedAddr32(false, 0);
     }
     ppuMapWrite(addr: u16): MappedAddr32 {
-        // NO PPU write since it would be ROM
+        if(addr >= 0x0000 && addr <= 0x1FFF) {
+            if(this.chrBanks == 0) {
+                return new MappedAddr32(true, addr);
+            }
+        }
+
         return new MappedAddr32(false, 0);
     }
 

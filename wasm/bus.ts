@@ -52,9 +52,9 @@ export class Bus {
     cpuWrite(addr: u16, data: u8): void {
         if (this._cart().cpuWrite(addr, data)) {
 
-        } else if (addr >= 0x0000 || addr <= 0xFFFF) {
+        } else if (addr >= 0x0000 && addr <= 0x1FFF) {
             this.cpuRam[addr & 0x07FF] = data;
-        } else if (addr >= 0x2000 || addr <= 0x3FFF) {
+        } else if (addr >= 0x2000 && addr <= 0x3FFF) {
             this._ppu().cpuWrite(addr & 0x0007, data);
         }
     }
@@ -65,9 +65,9 @@ export class Bus {
         data = cartResponse.value;
         if (cartResponse.control) {
 
-        } else if (addr >= 0x0000 || addr <= 0x1FFF) {
+        } else if (addr >= 0x0000 && addr <= 0x1FFF) {
             data = this.cpuRam[addr & 0x07FF];
-        } else if (addr >= 0x2000 || addr <= 0x3FFF) {
+        } else if (addr >= 0x2000 && addr <= 0x3FFF) {
             data = this._ppu().cpuRead(addr & 0x0007, bReadOnly);
         }
 
@@ -85,10 +85,18 @@ export class Bus {
     }
 
     clock(): void {
-        this._ppu().clock();
+        const ppu = this._ppu();
+        const cpu = this._cpu();
+        ppu.clock();
         if(this.nSystemClockCounter % 3 == 0) {
-            this._cpu().clock();
+            cpu.clock();
         }
+
+        if (ppu.nmi) {
+            ppu.nmi = false;
+            cpu.nmi();
+        }
+
         this.nSystemClockCounter++;
     }
 }

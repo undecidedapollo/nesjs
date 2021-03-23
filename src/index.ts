@@ -17,6 +17,12 @@ export enum CPU_FLAGS {
     N = (1 << 7),   // Negative
 }
 
+const WIDTH = 342;
+const HEIGHT = 262;
+
+const PALETTE_WIDTH = 128;
+const PALETTE_HEIGHT = 128;
+
 const modeLookup = [
     "IMM", "IZX", "IMP", "IMP", "IMP", "ZP0", "ZP0", "IMP", "IMP", "IMM", "IMP", "IMP", "IMP", "ABS", "ABS", "IMP",
     "REL", "IZY", "IMP", "IMP", "IMP", "ZPX", "ZPX", "IMP", "IMP", "ABY", "IMP", "IMP", "IMP", "ABX", "ABX", "IMP",
@@ -46,8 +52,12 @@ const VIEW_FLAGS: [string, CPU_FLAGS][] = [
     ["N", CPU_FLAGS.N],
 ];
 
+let selectedPalette = 0;
+let drawNameTable = false;
+let drawHackedPaletteDisplayer = false;
+
 function hex(num: number, pad: number) {
-    return num.toString(16).padStart(pad, "0");
+    return num.toString(16).toUpperCase().padStart(pad, "0");
 }
 
 
@@ -71,6 +81,7 @@ function drawCPUInfo(cpu: EmulatorModule.CPU) {
     writeEl("cpu_stack", `$${hex(cpu.stkp, 4)}`);
     writeEl("cpu_cycles", `$${hex(cpu.cycles, 2)}`);
     writeEl("cpu_clock", `[${cpu.clock_count}]`);
+    writeEl("ppu_palette", `${selectedPalette}`);
 }
 
 function drawRamBox(cpu: EmulatorModule.CPU) {
@@ -194,25 +205,83 @@ function generateExecutionMap(bus: EmulatorModule.Bus, cpu: EmulatorModule.CPU, 
 
 let executionMap: Map<number, string>;
 
-function drawInfo(bus: EmulatorModule.Bus, cpu: EmulatorModule.CPU, asm: AssemblyOutput) {
+function drawCanvas(ppu: EmulatorModule.PPU, asm: AssemblyOutput) {
+    var c = <HTMLCanvasElement>document.getElementById("screen_canvas");
+    var ctx = c.getContext("2d");
+    const clearBeforeRender = drawNameTable || drawHackedPaletteDisplayer;
+
+    if (clearBeforeRender) ctx.clearRect(0, 0, c.width, c.height);
+
+    const displayArray = asm.__getUint8ClampedArray(ppu.display);
+    const imgData = new ImageData(displayArray, WIDTH, HEIGHT);
+    var newCanvas = <HTMLCanvasElement>document.createElement("canvas");
+    newCanvas.width = imgData.width;
+    newCanvas.height = imgData.height;
+    const newCtx = newCanvas.getContext("2d");
+    newCtx.putImageData(imgData, 0, 0);
+    ctx.drawImage(newCanvas, 0, 0, imgData.width * 2, imgData.height * 2);
+    if (drawNameTable) {
+        ctx.font = "13px monospace";
+        const nt = asm.__getUint8ClampedArray(asm.__getArray(ppu.tblName)[0]);
+        for (let y = 0; y < 30; y++) {
+            for (let x = 0; x < 32; x++) {
+                ctx.strokeText(hex(nt[y * 32 + x], 2), x * 16 + 8, (y * 16) + 16);
+            }
+        }
+    }
+    if (drawHackedPaletteDisplayer) {
+        const nt = asm.__getUint8ClampedArray(asm.__getArray(ppu.tblName)[0]);
+        var paletteCanvas = <HTMLCanvasElement>document.getElementById(`canvas_palette_1`);
+        for (let y = 0; y < 30; y++) {
+            for (let x = 0; x < 32; x++) {
+                const id = nt[y * 32 + x];
+
+                const px = (id & 0x0F) << 3;
+                const py = ((id >>> 4) & 0x0f) << 3;
+                ctx.drawImage(paletteCanvas, px * 2, py * 2, 16, 16, x * 16, y * 16, 16, 16);
+            }
+        }
+    }
+}
+
+function drawPalette(id: number, ppu: EmulatorModule.PPU, asm: AssemblyOutput) {
+    var c = <HTMLCanvasElement>document.getElementById(`canvas_palette_${id}`);
+    var ctx = c.getContext("2d");
+    const displayArray = asm.__getUint8ClampedArray(ppu.getPatternTable(id, selectedPalette));
+    const imgData = new ImageData(displayArray, PALETTE_WIDTH, PALETTE_HEIGHT);
+    var newCanvas = <HTMLCanvasElement>document.createElement("canvas");
+    newCanvas.width = imgData.width;
+    newCanvas.height = imgData.height;
+    newCanvas.getContext("2d").putImageData(imgData, 0, 0);
+    ctx.drawImage(newCanvas, 0, 0, imgData.width * 2, imgData.height * 2);
+}
+
+function drawInfo(bus: EmulatorModule.Bus, cpu: EmulatorModule.CPU, ppu: EmulatorModule.PPU, asm: AssemblyOutput) {
     if (!executionMap) {
         executionMap = generateExecutionMap(bus, cpu, asm, 0x0000, 0xFFFF);
     }
     drawCPUInfo(cpu);
     drawRamBox(cpu);
     drawExecution(cpu, executionMap);
+    drawPalette(0, ppu, asm);
+    drawPalette(1, ppu, asm);
+    drawCanvas(ppu, asm);
 }
 
 function initHTML() {
     document.body.innerHTML = `
     <div class="flex-grid">
       <div class="col-8">
-        <div id="ram_0" style="font-weight: bold;">
+       <div id="memory_disp" hidden>
+            <div id="ram_0" style="font-weight: bold;"></div>
+            </br>
+            </br>
+            <div id="ram_1" style="font-weight: bold;"></div>
         </div>
-        </br>
-        </br>
-        <div id="ram_1" style="font-weight: bold;">
-        </div>
+        <canvas id="screen_canvas" width="${WIDTH * 2}" height="${HEIGHT * 2}"></canvas>
+        <br />
+        <canvas id="canvas_palette_0" width="${PALETTE_WIDTH * 2}" height="${PALETTE_HEIGHT * 2}"></canvas>
+        <canvas id="canvas_palette_1" width="${PALETTE_WIDTH * 2}" height="${PALETTE_HEIGHT * 2}"></canvas>
       </div>
       <div class="col-4">
         <div>
@@ -224,6 +293,7 @@ function initHTML() {
           <b>Stack P:</b> <span id="cpu_stack"></span></br>
           <b>Cycles:</b> <span id="cpu_cycles"></span></br>
           <b>Clock:</b> <span id="cpu_clock"></span></br>
+          <b>Palette:</b> <span id="ppu_palette"></span></br>
         </div>
         </br>
         </br>
@@ -242,16 +312,6 @@ async function initProgram(bus: EmulatorModule.Bus, cpu: EmulatorModule.CPU, asm
     asm.__pin(cart.valueOf());
     bus.insertCartridge(cart.valueOf());
     bus.reset();
-
-    // bus.init();
-    // const rom = "A2 0A 8E 00 00 A2 03 8E 01 00 AC 00 00 A9 00 18 6D 01 00 88 D0 FA 8D 02 00 EA EA EA";
-    // const BASE_PROGRAM = 0x8000;
-    // rom.split(" ").map((x) => parseInt(x, 16)).forEach((x, i) => {
-    //     bus.cpuWrite(BASE_PROGRAM + i, x);
-    // });
-    // bus.cpuWrite(0xFFFC, 0x00);
-    // bus.cpuWrite(0xFFFD, 0x80);
-    // cpu.reset();
 }
 
 function _now() {
@@ -290,15 +350,15 @@ async function main() {
         lastAnimationTimestamp = now;
         if (!emulationActive) return;
 
-        if(residualTime > 0) {
-            residualTime -= lastAnimationTimestamp;
+        if (residualTime > 0) {
+            residualTime -= delta;
         } else {
-            residualTime += (1.0 / 60.0) - lastAnimationTimestamp;
+            residualTime += (1.0 / 60.0) - delta;
             do {
                 b.clock();
             } while (!p.frameComplete);
             p.frameComplete = false;
-            drawInfo(b, c, exports);
+            drawInfo(b, c, p, exports);
         }
     }
 
@@ -317,20 +377,29 @@ async function main() {
             } while (c.cycles == 0);
         }
         if (event.key === "f") {
-            do {
-                b.clock();
-            } while (!p.frameComplete);
-            do {
-                b.clock();
-            } while (c.cycles != 0);
-            p.frameComplete = false;
+            try {
+                do {
+                    b.clock();
+                } while (!p.frameComplete);
+                do {
+                    b.clock();
+                } while (c.cycles != 0);
+                p.frameComplete = false;
+            } catch (ex) {
+                console.log("Error rendering PPU: ", p.cycle, p.scanLine, p.lastPixelIndex);
+                console.log(ex);
+            }
         }
-        if (event.key === "c") c.clock();
+        if (event.key === "c") b.clock();
         if (event.key === "r") initProgram(b, c, exports);
+        if (event.key === "p") {
+            selectedPalette++;
+            selectedPalette &= 0x07;
+        }
 
-        drawInfo(b, c, exports);
+        drawInfo(b, c, p, exports);
     });
-    drawInfo(b, c, exports);
+    drawInfo(b, c, p, exports);
 }
 
 initHTML();
