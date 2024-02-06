@@ -13,4 +13,5 @@ export abstract class Mapper {
     abstract cpuMapWrite(addr: u16): MappedAddr32;
     abstract ppuMapRead(addr: u16): MappedAddr32;
     abstract ppuMapWrite(addr: u16): MappedAddr32;
+    abstract reset(): void;
 }

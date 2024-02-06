@@ -364,7 +364,7 @@ export class PPU {
             if (addr == 0x0014) addr = 0x0004;
             if (addr == 0x0018) addr = 0x0008;
             if (addr == 0x001C) addr = 0x000C;
-            data = this.tblPalette[addr];
+            data = this.tblPalette[addr] & (getFlag(this.mask, PPUMask.grayscale) ? 0x30 : 0x3F);
         }
 
         return data;
@@ -445,6 +445,27 @@ export class PPU {
         return this.spritePatternTable[i];
     }
 
+    reset() : void {
+        this.fine_x = 0x00;
+        this.addressLatch = 0x00;
+        this.ppuDataBuffer = 0x00;
+        this.scanLine = 0;
+        this.cycle = 0;
+        this.bg_next_tile_id = 0x00;
+        this.bg_next_tile_attrib = 0x00;
+        this.bg_next_tile_lsb = 0x00;
+        this.bg_next_tile_msb = 0x00;
+        this.bg_shifter_pattern_lo = 0x0000;
+        this.bg_shifter_pattern_hi = 0x0000;
+        this.bg_shifter_attrib_lo = 0x0000;
+        this.bg_shifter_attrib_hi = 0x0000;
+        this.status = 0x00;
+        this.mask = 0x00;
+        this.control = 0x00;
+        this.vram_addr.reg = 0x0000;
+        this.tram_addr.reg = 0x0000;
+    }
+
     clock(): void {
         function incrementScrollX(self: PPU): void {
             if (getFlag(self.mask, PPUMask.render_background) || getFlag(self.mask, PPUMask.render_sprites)) {
@@ -485,6 +506,7 @@ export class PPU {
 
         function transferAddressY(self: PPU): void {
             if (getFlag(self.mask, PPUMask.render_background) || getFlag(self.mask, PPUMask.render_sprites)) {
+                self.vram_addr.fine_y = self.tram_addr.fine_y;
                 self.vram_addr.nametable_y = self.tram_addr.nametable_y;
                 self.vram_addr.coarse_y = self.tram_addr.coarse_y;
             }
@@ -514,7 +536,7 @@ export class PPU {
                 this.status = setFlag(this.status, PPUStatus.vertical_blank, false);
             }
 
-            if ((this.cycle >= 2 && this.cycle < 258) || (this.cycle >= 321 && this.cycle < 328)) {
+            if ((this.cycle >= 2 && this.cycle < 258) || (this.cycle >= 321 && this.cycle < 338)) {
                 updateShifters(this);
                 switch ((this.cycle - 1) % 8) {
                     case 0:
@@ -522,10 +544,10 @@ export class PPU {
                         this.bg_next_tile_id = this.ppuRead(0x2000 | (this.vram_addr.reg & 0x0FFF), false);
                         break;
                     case 2:
-                        this.bg_next_tile_attrib = this.ppuRead(0x23C0 | (this.vram_addr.nametable_y << 11)
-                            | (this.vram_addr.nametable_x << 10)
-                            | ((this.vram_addr.coarse_y >>> 2) << 3)
-                            | (this.vram_addr.coarse_x >>> 2)
+                        this.bg_next_tile_attrib = this.ppuRead(0x23C0 | ((<u16>this.vram_addr.nametable_y) << 11)
+                            | ((<u16>this.vram_addr.nametable_x) << 10)
+                            | (((<u16>this.vram_addr.coarse_y) >>> 2) << 3)
+                            | ((<u16>this.vram_addr.coarse_x) >>> 2)
                             , false);
                         if (this.vram_addr.coarse_y & 0x02) this.bg_next_tile_attrib >>>= 4;
                         if (this.vram_addr.coarse_x & 0x02) this.bg_next_tile_attrib >>>= 2;
@@ -533,16 +555,16 @@ export class PPU {
                         break;
                     case 4:
                         this.bg_next_tile_lsb = this.ppuRead(
-                            (getFlag(this.control, PPUControl.pattern_background) << 12)
+                            ((<u16>getFlag(this.control, PPUControl.pattern_background)) << 12)
                             + ((<u16>this.bg_next_tile_id) << 4)
-                            + (this.vram_addr.fine_y) + 0
+                            + (<u16>this.vram_addr.fine_y) + 0
                             , false);
                         break;
                     case 6:
-                        this.bg_next_tile_lsb = this.ppuRead(
-                            (getFlag(this.control, PPUControl.pattern_background) << 12)
+                        this.bg_next_tile_msb = this.ppuRead(
+                            (<u16>getFlag(this.control, PPUControl.pattern_background) << 12)
                             + ((<u16>this.bg_next_tile_id) << 4)
-                            + (this.vram_addr.fine_y) + 8
+                            + (<u16>this.vram_addr.fine_y) + 8
                             , false);
                         break;
                     case 7:
@@ -557,7 +579,12 @@ export class PPU {
             }
 
             if (this.cycle == 257) {
+                loadBackgroundShifters(this);
                 transferAddressX(this);
+            }
+
+            if(this.cycle == 338 || this.cycle == 340) {
+                this.bg_next_tile_id = this.ppuRead(0x2000 | (this.vram_addr.reg & 0x0FFF), false);
             }
 
             if (this.scanLine == -1 && this.cycle >= 280 && this.cycle < 305) {
@@ -569,13 +596,16 @@ export class PPU {
             // Post Render Scanline - Do Nothing!
         }
 
-        if (this.scanLine == 241 && this.cycle == 1) {
-            this.status = setFlag(this.status, PPUStatus.vertical_blank, true);
-            if (getFlag(this.control, PPUControl.enable_nmi) === 1) {
-                this.nmi = true;
-            }
+        if(this.scanLine >= 241 && this.scanLine < 261) {
+            if (this.scanLine == 241 && this.cycle == 1) {
+                this.status = setFlag(this.status, PPUStatus.vertical_blank, true);
+                if (getFlag(this.control, PPUControl.enable_nmi) === 1) {
+                    this.nmi = true;
+                }
+            }    
         }
 
+       
         let bgPixel: u8 = 0x00;
         let bgPalete: u8 = 0x00;
 

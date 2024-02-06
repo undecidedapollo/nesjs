@@ -81,8 +81,8 @@ export class CPU {
 
     clock(): void {
         if (this.cycles === 0) {
-            this.setFlag(CPU_FLAGS.U, true);
             this.opcode = this.read(this.pc);
+            this.setFlag(CPU_FLAGS.U, true);
             this.pc++;
             const instruction: Instruction = this.lookup[this.opcode];
             this.cycles = instruction.cycles;
@@ -270,8 +270,8 @@ export class CPU {
         const t: u16 = this.read(this.pc);
         this.pc++;
 
-        const lo: u16 = this.read((t + this.x) & 0x00FF);
-        const hi: u16 = this.read((t + this.x + 1) & 0x00FF);
+        const lo: u16 = this.read(<u16>(t + <u16>this.x) & 0x00FF);
+        const hi: u16 = this.read(<u16>(t + <u16>this.x + 1) & 0x00FF);
         this.addr_abs = (hi << 8) | lo;
         return 0;
     }

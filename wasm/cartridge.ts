@@ -104,6 +104,10 @@ export class Cartridge {
         }
     }
 
+    reset(): void {
+        this.mapper.reset();
+    }
+
     cpuRead(addr: u16, bReadOnly: boolean): ControlRead {
         let data: u8 = 0x00;
         let mapperResponse = this.mapper.cpuMapRead(addr);

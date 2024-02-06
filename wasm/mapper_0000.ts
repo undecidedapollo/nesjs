@@ -1,6 +1,9 @@
 import { MappedAddr32, Mapper } from "./mapper";
 
 export class Mapper_0000 extends Mapper {
+    reset() : void {
+
+    }
     cpuMapRead(addr: u16): MappedAddr32 {
         if(addr >= 0x8000 && addr <= 0xFFFF) {
             const newAddr : u32 = addr & (this.prgBanks > 1 ? 0x7FFF : 0x3FFF);

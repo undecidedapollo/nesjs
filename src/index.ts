@@ -305,7 +305,7 @@ function initHTML() {
 }
 
 async function initProgram(bus: EmulatorModule.Bus, cpu: EmulatorModule.CPU, asm: AssemblyOutput) {
-    const data = await fetch("nestest.nes").then((x) => x.arrayBuffer()).then((x) => new Uint8Array(x));
+    const data = await fetch("smb.nes").then((x) => x.arrayBuffer()).then((x) => new Uint8Array(x));
     const romArrayId = asm.__newArray(asm.UInt8Array_ID, Array.from(data.values()));
     asm.__pin(romArrayId);
     let cart = new asm.Cartridge(romArrayId);
@@ -320,6 +320,7 @@ function _now() {
 }
 
 async function main() {
+    let pressedKeys = {};
     let emulationActive = false;
     let residualTime = 0;
     let lastAnimationTimestamp = 0;
@@ -354,6 +355,18 @@ async function main() {
             residualTime -= delta;
         } else {
             residualTime += (1.0 / 60.0) - delta;
+            const ctrl = exports.__getArrayView(b.controller);
+
+            ctrl[0] = 0x00;
+            ctrl[0] |= pressedKeys["1"] ? 0x80 : 0x00;
+            ctrl[0] |= pressedKeys["2"] ? 0x40 : 0x00;
+            ctrl[0] |= pressedKeys["Shift"] ? 0x20 : 0x00;
+            ctrl[0] |= pressedKeys["Enter"] ? 0x10 : 0x00;
+            ctrl[0] |= pressedKeys["ArrowUp"] ? 0x08 : 0x00;
+            ctrl[0] |= pressedKeys["ArrowDown"] ? 0x04 : 0x00;
+            ctrl[0] |= pressedKeys["ArrowLeft"] ? 0x02 : 0x00;
+            ctrl[0] |= pressedKeys["ArrowRight"] ? 0x01 : 0x00;
+
             do {
                 b.clock();
             } while (!p.frameComplete);
@@ -361,6 +374,9 @@ async function main() {
             drawInfo(b, c, p, exports);
         }
     }
+
+    document.addEventListener("keyup", (e) =>  pressedKeys[e.key] = false);
+    document.addEventListener("keydown", (e) =>  pressedKeys[e.key] = true);
 
     requestAnimationFrame(onFrameUpdate);
 

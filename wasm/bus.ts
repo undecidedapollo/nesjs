@@ -10,6 +10,8 @@ export class Bus {
     public ppu: PPU | null;
     public cart: Cartridge | null;
     public nSystemClockCounter: u32;
+    public controller: u8[] = [0, 0];
+    public controllerState: u8[] = [0, 0];
 
     constructor() {
         this._cpuRam = new ArrayBuffer(2048);
@@ -56,6 +58,8 @@ export class Bus {
             this.cpuRam[addr & 0x07FF] = data;
         } else if (addr >= 0x2000 && addr <= 0x3FFF) {
             this._ppu().cpuWrite(addr & 0x0007, data);
+        } else if (addr >= 0x4016 && addr <= 0x4017) {
+            this.controllerState[addr & 0x0001] = this.controller[addr & 0x0001];
         }
     }
 
@@ -69,6 +73,10 @@ export class Bus {
             data = this.cpuRam[addr & 0x07FF];
         } else if (addr >= 0x2000 && addr <= 0x3FFF) {
             data = this._ppu().cpuRead(addr & 0x0007, bReadOnly);
+        } else if (addr >= 0x4016 && addr <= 0x4017) {
+            data = (this.controllerState[addr & 0x0001] & 0x80) > 0 ? 1 : 0;
+            this.controllerState[addr & 0x0001] <<= 1;
+
         }
 
         return data;
@@ -80,7 +88,9 @@ export class Bus {
     }
 
     reset(): void {
+        this._cart().reset();
         this._cpu().reset();
+        this._ppu().reset();
         this.nSystemClockCounter = 0;
     }
 
